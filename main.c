@@ -4,23 +4,26 @@
 #include<stdlib.h>
 #include<unistd.h>
 #include<sys/wait.h>
-
+#include<dirent.h>
 #define SH_TOK_BUFSIZE 64
 
 bool sh_cd(char **args);
 bool sh_help(char **args);
 bool sh_exit(char **args);
+bool sh_ls(char **args);
 
 char* builtin_str[] = {
     "cd",
     "help",
-    "exit"
+    "exit",
+    "ls"
 };
 
 bool (*builtin_fun[])(char**) = {
     &sh_cd,
     &sh_help,
-    &sh_exit
+    &sh_exit,
+    &sh_ls
 };
 
 int sh_num_builtins() {
@@ -55,6 +58,23 @@ bool sh_help(char **args) {
 
 bool sh_exit(char **args) {
     return false;
+}
+
+bool sh_ls(char **args) {
+    struct dirent **namelist;
+       int n;
+
+       n = scandir(".", &namelist, NULL, alphasort);
+       if (n < 0)
+           perror("scandir error");
+       else {
+           while (n--) {
+               printf("%s\n", namelist[n]->d_name);
+               free(namelist[n]);
+           }
+           free(namelist);
+       }
+       return true;
 }
 
 char* sh_read_line(void) {
