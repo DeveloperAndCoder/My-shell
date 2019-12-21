@@ -36,7 +36,7 @@ int sh_num_builtins() {
 
 bool sh_cd(char **args) {
     if(args[1] == NULL) {
-        fprintf(stderr, "sh: expecte argument to \"cd\"\n");
+        fprintf(stderr, "sh: expected argument to \"cd\"\n");
     }
     else {
         if(chdir(args[1]) != 0) {
@@ -61,27 +61,53 @@ bool sh_exit(char **args) {
 }
 
 bool sh_ls(char **args) {
-    struct dirent **namelist;
-       int n;
-
-       n = scandir(".", &namelist, NULL, alphasort);
-       if (n < 0)
-           perror("scandir error");
-       else {
-           while (n--) {
-               printf("%s\n", namelist[n]->d_name);
-               free(namelist[n]);
-           }
-           free(namelist);
-       }
-       return true;
+    if(args[2] != NULL) {
+        fprintf(stderr, "sh: expected 1 argument to \"ls\" provided more than 1 arguments\n");
+    }
+    else {
+        struct dirent **namelist;
+        int n;
+        if(args[1] != NULL) {
+            n = scandir(args[1], &namelist, NULL, alphasort);
+        }
+        else {
+            n = scandir(".", &namelist, NULL, alphasort);
+        }
+        if (n < 0)
+            perror("scandir error");
+        else {
+            while (n--) {
+                printf("%s\n", namelist[n]->d_name);
+                free(namelist[n]);
+            }
+            free(namelist);
+        }
+    }
+    return true;
 }
 
 char* sh_read_line(void) {
-    char* line = NULL;
-    size_t buffersize = 0;
-    getline(&line, &buffersize, stdin);
-    line[strlen(line)-1] = 0;
+    int size = SH_TOK_BUFSIZE;
+    char* line = malloc(size * sizeof(char));
+    int characters = 1;
+    char ch = getchar();
+    while(ch != '\n' || ch == EOF) {
+        while(size < characters) {
+            //printf("allocating space : %d\n", size);
+            size += SH_TOK_BUFSIZE;
+            line = realloc(line, size * sizeof(char));
+            //printf("charatersize = %d line size = %d\n", characters, size);
+            if(!line) {
+                //printf("Error in reallocating buffer!\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        line[characters-1] = ch;
+        ch = getchar();
+        characters++;
+    }
+    line[characters-1] = '\0';
+    //printf("Found: %s\n", line);
     return line;
 }
 
@@ -90,15 +116,14 @@ char** sh_tokenize(char* line) {
     char* token = strtok(line, " ");
     char** tokens = malloc(bufsize * sizeof(char*));
     int position = 1;
-    int size = 0;
-    
     tokens[0] = token;
     
     while(token) {
-        if(position > size) {
+        while(position > bufsize) {
+            bufsize += SH_TOK_BUFSIZE;
             tokens = realloc(tokens, bufsize*sizeof(char*));
         }
-        //printf("token found = %s\n", token);
+      //  printf("token found = %s\n", token);
         token = strtok(NULL, " ");
         tokens[position] = token;
         position++;
@@ -142,6 +167,10 @@ bool sh_execute(char** args) {
     }
     return launch(args);
 }
+/*
+char* rewind() {
+    
+}*/
 
 void main() {
     char *line;
