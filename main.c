@@ -112,6 +112,14 @@ void delete_char(char *str, int i, int len) {
     str[len-1] = 0;
 }
 
+void insert_char(char *str, char ch, int i, int len) {
+    for (int j = len+1; j > i ; j--)
+    {
+        str[j] = str[j-1];
+    }
+    str[i] = ch;
+}
+
 char* sh_read_line(void) {
     int size = SH_TOK_BUFSIZE;
     char* line = malloc(size * sizeof(char));
@@ -130,8 +138,6 @@ char* sh_read_line(void) {
             if(left > 0) {
                 cursorbackward(left);
             }
-            //left--;
-            //cursorforward(1);
             ch = getch();
             continue;
         }
@@ -173,9 +179,15 @@ char* sh_read_line(void) {
                 exit(EXIT_FAILURE);
             }
         }
-        line[characters] = ch;
-        ch = getch();
+        insert_char(line, ch, characters - left, characters);
         characters++;
+        if(left > 0) {
+            CLEARLINE;
+            cursorbackward(characters - left + 2);
+            printf("> %.*s", characters, line);
+            cursorbackward(left);
+        }
+        ch = getch();
     }
     line[characters] = '\0';
     printf("\n");
