@@ -2,15 +2,33 @@
 #include<string.h>
 #include<stdbool.h>
 #include<stdlib.h>
+#include<termios.h>
 #include<unistd.h>
 #include<sys/wait.h>
 #include<dirent.h>
+
 #define SH_TOK_BUFSIZE 64
+#define cursorforward(x) printf("\033[%dC", (x))
+#define cursorbackward(x) printf("\033[%dD", (x))
+#define CLEARLINE printf("%c[2K", 27)
 
 bool sh_cd(char **args);
 bool sh_help(char **args);
 bool sh_exit(char **args);
 bool sh_ls(char **args);
+
+int getch(void)
+{
+    struct termios oldattr, newattr;
+    int ch;
+    tcgetattr( STDIN_FILENO, &oldattr );
+    newattr = oldattr;
+    newattr.c_lflag &= ~( ICANON | ECHO );
+    tcsetattr( STDIN_FILENO, TCSANOW, &newattr );
+    ch = getchar();
+    tcsetattr( STDIN_FILENO, TCSANOW, &oldattr );
+    return ch;
+}
 
 char* builtin_str[] = {
     "cd",
@@ -86,28 +104,81 @@ bool sh_ls(char **args) {
     return true;
 }
 
+void delete_char(char *str, int i, int len) {
+    for (; i < len - 1 ; i++)
+    {
+       str[i] = str[i+1];
+    }
+    str[len-1] = 0;
+}
+
 char* sh_read_line(void) {
     int size = SH_TOK_BUFSIZE;
     char* line = malloc(size * sizeof(char));
-    int characters = 1;
-    char ch = getchar();
+    int characters = 0, left = 0;
+    char ch = getch();
+    
     while(ch != '\n' || ch == EOF) {
-        while(size < characters) {
-            //printf("allocating space : %d\n", size);
+        if((int)ch == 127 || (int)ch == 8) {
+            CLEARLINE;
+            cursorbackward(characters+2);
+            if(characters - left > 0) {
+                delete_char(line, characters - left - 1, characters);
+                characters--;
+            }
+            printf("> %.*s", characters, line);
+            if(left > 0) {
+                cursorbackward(left);
+            }
+            //left--;
+            //cursorforward(1);
+            ch = getch();
+            continue;
+        }
+        else if(ch == '\033') {
+            char cc = getch();
+            switch(getch()) {
+            case 'A':
+                printf("Up arrow");
+                // code for arrow up
+                break;
+            case 'B':
+                // code for arrow down
+                break;
+            case 'C':
+                if(left > 0) {
+                    cursorforward(1);
+                    left--;
+                }
+                // code for arrow right
+                break;
+            case 'D':
+                if(left < characters) {
+                    cursorbackward(1);
+                    left++;
+                }
+                // code for arrow left
+                break;
+            }
+            ch = getch();
+            continue;
+        }
+        else {
+            printf("%c", ch);
+        }
+        while(size <= characters) {
             size += SH_TOK_BUFSIZE;
             line = realloc(line, size * sizeof(char));
-            //printf("charatersize = %d line size = %d\n", characters, size);
             if(!line) {
-                //printf("Error in reallocating buffer!\n");
                 exit(EXIT_FAILURE);
             }
         }
-        line[characters-1] = ch;
-        ch = getchar();
+        line[characters] = ch;
+        ch = getch();
         characters++;
     }
-    line[characters-1] = '\0';
-    //printf("Found: %s\n", line);
+    line[characters] = '\0';
+    printf("\n");
     return line;
 }
 
@@ -123,7 +194,6 @@ char** sh_tokenize(char* line) {
             bufsize += SH_TOK_BUFSIZE;
             tokens = realloc(tokens, bufsize*sizeof(char*));
         }
-      //  printf("token found = %s\n", token);
         token = strtok(NULL, " ");
         tokens[position] = token;
         position++;
@@ -157,20 +227,13 @@ bool sh_execute(char** args) {
     if(args[0] == NULL) {
         return true;
     }
-    //printf("args[0] = %s, length = %lu\n", args[0], strlen(args[0]));
     for(int i = 0; i < sh_num_builtins(); i++) {
-        //printf("function name = %s, value = %d, length = %lu\n", builtin_str[i], strcmp(args[0], builtin_str[i]), strlen(builtin_str[i]));
         if(strcmp(args[0], builtin_str[i]) == 0) {
-            //printf("Matched with %s", builtin_str[i]);
             return (*builtin_fun[i])(args);
         }
     }
     return launch(args);
 }
-/*
-char* rewind() {
-    
-}*/
 
 void main() {
     char *line;
